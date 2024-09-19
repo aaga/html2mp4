@@ -14,7 +14,7 @@ w = 1280
 h = 720
 moviesize = w,h
 
-TEMP_AUDIO_FILE = "/tmp/tmp_audio.wav"
+TEMP_AUDIO_FILE = "/tmp/tmp_audio.m4a"
 
 class ShotList:
     def __init__(self, title = None):
@@ -135,9 +135,39 @@ def main():
 
         shot_list.debug_print()
 
-        tts = TTS(model_name="tts_models/en/ljspeech/vits", progress_bar=True)
+        # tts = TTS(model_name="tts_models/en/ljspeech/vits", progress_bar=True)
+        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True)
+        # tts = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", progress_bar=True)
 
-        makeBasicMovie(shot_list, tts)
+        makeStarWarsMovie(shot_list, tts)
+
+def makeStarWarsMovie(shot_list, tts):
+    clips = []
+    counter = 0
+    luke_clip = VideoFileClip("video_clips/luke.mp4")
+    c3po_clip = VideoFileClip("video_clips/c3po.mp4")
+
+    for scene in shot_list.scenes:
+        if (scene.tag == "dl"):
+            for shot in scene.shots:
+                counter += 1
+                filepath = "/tmp/" + str(counter) + ".wav"
+                clip_to_use = None
+                if (shot.tag == "dt"):
+                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav="audio_samples/luke.wav", language="en", file_path=filepath)
+                    clip_to_use = luke_clip
+                else:
+                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav="audio_samples/c3po.wav", language="en", file_path=filepath)
+                    clip_to_use = c3po_clip
+                audio_clip = AudioFileClip(filepath)
+                looped_clip = clip_to_use.loop(duration = audio_clip.duration)
+                looped_clip.audio = audio_clip
+                clips.append(looped_clip)
+    
+    final = concatenate_videoclips(clips)
+    filename = "out/" + shot_list.title + ".mp4"
+    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=5)
+
 
 def makeBasicMovie(shot_list, tts = None):
     clips = []
@@ -194,7 +224,7 @@ def makeBasicMovie(shot_list, tts = None):
             
     final = concatenate_videoclips(clips)
     filename = "out/" + shot_list.title + ".mp4"
-    final.write_videofile(filename, codec="libx264", temp_audiofile="/tmp/tmp_audio.m4a", remove_temp=True, audio_codec="aac", fps=5)
+    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=5)
 
 
 if __name__ == "__main__":
