@@ -942,6 +942,7 @@ dependencies = [
     { name = "html5lib" },
     { name = "moviepy" },
     { name = "scikit-image" },
+    { name = "srt" },
     { name = "tts" },
 ]
 
@@ -951,6 +952,7 @@ requires-dist = [
     { name = "html5lib", specifier = ">=1.1" },
     { name = "moviepy", specifier = ">=1.0.3" },
     { name = "scikit-image", specifier = ">=0.22.0" },
+    { name = "srt", specifier = ">=3.5.3" },
     { name = "tts", specifier = ">=0.22.0" },
 ]
 
@@ -2959,6 +2961,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/81/7b25bc53fc3b95b072d258e04d82372a46dbf8f8c5b3b554ee93d7887fa5/srsly-2.4.8-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:be5b751ad88fdb58fb73871d456248c88204f213aaa3c9aab49b6a1802b3fa8d", size = 492418 },
     { url = "https://files.pythonhosted.org/packages/52/b1/970e7085fbb47fbc824adb0b0f211039ee3da01daa29a69ca99dd926dd48/srsly-2.4.8-cp39-cp39-win_amd64.whl", hash = "sha256:822a38b8cf112348f3accbc73274a94b7bf82515cb14a85ba586d126a5a72851", size = 483839 },
 ]
+
+[[package]]
+name = "srt"
+version = "3.5.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/b7/4a1bc231e0681ebf339337b0cd05b91dc6a0d701fa852bb812e244b7a030/srt-3.5.3.tar.gz", hash = "sha256:4884315043a4f0740fd1f878ed6caa376ac06d70e135f306a6dc44632eed0cc0", size = 28296 }
 
 [[package]]
 name = "sudachidict-core"

@@ -9,5 +9,6 @@ dependencies = [
     "html5lib>=1.1",
     "moviepy>=1.0.3",
     "scikit-image>=0.22.0",
+    "srt>=3.5.3",
     "tts>=0.22.0",
 ]

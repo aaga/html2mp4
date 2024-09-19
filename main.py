@@ -1,16 +1,13 @@
-from bs4 import BeautifulSoup
-
 import numpy as np
 import textwrap
+import srt
+import subprocess
+from datetime import timedelta
+from bs4 import BeautifulSoup
 from moviepy.editor import *
 from moviepy.video.tools.drawing import color_gradient
 from skimage import transform as tf
-
-import torch
 from TTS.api import TTS
-
-# Get device
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # BASIC MOVIE RESOLUTION
 w = 1280
@@ -23,7 +20,8 @@ ch = 816
 cmoviesize = cw,ch
 
 TEMP_AUDIO_FILE = "/tmp/tmp_audio.m4a"
-TEMP_OPENING_FILE = "TEMP_OPENING.mp4"
+TEMP_VIDEO_FILE = "/tmp/tmp_video.mp4"
+TEMP_OPENING_FILE = "/tmp/tmp_opening.mp4"
 
 FPS = 24
 
@@ -146,11 +144,8 @@ def main():
 
         shot_list.debug_print()
 
-        # tts = TTS(model_name="tts_models/en/ljspeech/vits", progress_bar=True)
-        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True)
-        # tts = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", progress_bar=True)
-
-        make_star_wars_movie(shot_list, tts)
+        make_star_wars_movie(shot_list, dark_mode=True)
+        # make_basic_movie(shot_list, with_tts=True)
 
 def make_star_wars_opening(h1scene):
     clips = []
@@ -221,6 +216,7 @@ def make_star_wars_opening(h1scene):
     audio_clip = AudioFileClip("assets/opening.wav")
     audio_clip = audio_clip.set_duration(final.duration)
     final.audio = audio_clip
+    final_duration = final.duration
 
     final.write_videofile(TEMP_OPENING_FILE, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
 
@@ -234,40 +230,69 @@ def make_star_wars_opening(h1scene):
     audio_clip.close()
     final.close()
 
-def make_star_wars_movie(shot_list, tts):
+    return final_duration
+
+def make_star_wars_movie(shot_list, dark_mode = False):
+    tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True)
     clips = []
+    subtitles = []
+    curr_time = 0.0
     counter = 0
-    luke_clip = VideoFileClip("video_clips/luke.mp4")
-    c3po_clip = VideoFileClip("video_clips/c3po.mp4")
+
+    dt_video, dt_audio, dd_video, dd_audio = None, None, None, None
+    if (dark_mode):
+        dt_video = VideoFileClip("video_clips/vader.mp4")
+        dt_audio = "audio_samples/vader.wav"
+        dd_video = VideoFileClip("video_clips/tarkin.mp4")
+        dd_audio = "audio_samples/tarkin.wav"
+    else:
+        dt_video = VideoFileClip("video_clips/luke.mp4")
+        dt_audio = "audio_samples/luke.wav"
+        dd_video = VideoFileClip("video_clips/c3po.mp4")
+        dd_audio = "audio_samples/c3po.wav"
 
     for scene in shot_list.scenes:
         if (scene.tag == "h1"):
-            make_star_wars_opening(scene)
+            curr_time += make_star_wars_opening(scene)
         if (scene.tag == "dl"):
             for shot in scene.shots:
                 counter += 1
                 filepath = "/tmp/" + str(counter) + ".wav"
                 clip_to_use = None
                 if (shot.tag == "dt"):
-                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav="audio_samples/luke.wav", language="en", file_path=filepath)
-                    clip_to_use = luke_clip
+                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav=dt_audio, language="en", file_path=filepath)
+                    clip_to_use = dt_video
                 else:
-                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav="audio_samples/c3po.wav", language="en", file_path=filepath)
-                    clip_to_use = c3po_clip
+                    tts.tts_to_file(text=shot.get_plain_text(), speaker_wav=dd_audio, language="en", file_path=filepath)
+                    clip_to_use = dd_video
                 audio_clip = AudioFileClip(filepath)
                 looped_clip = clip_to_use.loop(duration = audio_clip.duration)
                 looped_clip.audio = audio_clip
                 clips.append(looped_clip)
+                subtitle_text = shot.get_plain_text(True, True)
+                subtitles.append(srt.Subtitle(index=counter, start=timedelta(seconds=curr_time), end=timedelta(seconds=curr_time+looped_clip.duration), content=subtitle_text.replace("\n"," ")))
+                curr_time += looped_clip.duration
 
     opening_clip = VideoFileClip(TEMP_OPENING_FILE)
     clips.insert(0, opening_clip)
     final = concatenate_videoclips(clips)
-    filename = "out/" + shot_list.title + ".mp4"
-    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
+    mp4_filename = "out/" + shot_list.title + ".mp4"
+    final.write_videofile(mp4_filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
+    subtitleSRT = srt.compose(subtitles)
+    srt_filename = "out/" + shot_list.title + ".srt"
+    with open(srt_filename, "w") as text_file:
+        text_file.write(subtitleSRT)
+    subprocess.run(["ffmpeg", "-i", mp4_filename, "-i", srt_filename, "-c", "copy", "-c:s", "mov_text", TEMP_VIDEO_FILE])
+    subprocess.run(["rm", mp4_filename])
+    subprocess.run(["mv", TEMP_VIDEO_FILE, mp4_filename])
 
-
-def makeBasicMovie(shot_list, tts = None):
+def make_basic_movie(shot_list, with_tts = False):
+    tts = None
+    if (with_tts):
+        tts = TTS(model_name="tts_models/en/ljspeech/vits", progress_bar=True)
     clips = []
+    subtitles = []
+    curr_time = 0.0
     counter = 0
     for scene in shot_list.scenes:
         if (scene.tag == "h1"):
@@ -292,6 +317,8 @@ def makeBasicMovie(shot_list, tts = None):
                 audio_clip = AudioFileClip(filepath)
                 composite_clip.audio = audio_clip
                 composite_clip = composite_clip.set_duration(audio_clip.duration)
+                subtitles.append(srt.Subtitle(index=counter, start=timedelta(seconds=curr_time), end=timedelta(seconds=curr_time+composite_clip.duration), content=speaking_text.replace("\n"," ")))
+                curr_time+=composite_clip.duration
             else:
                 composite_clip = composite_clip.set_duration(5)
             
@@ -313,6 +340,8 @@ def makeBasicMovie(shot_list, tts = None):
                         audio_clip = AudioFileClip(filepath)
                         composite_clip.audio = audio_clip
                         composite_clip = composite_clip.set_duration(audio_clip.duration)
+                        subtitles.append(srt.Subtitle(index=counter, start=timedelta(seconds=curr_time), end=timedelta(seconds=curr_time+composite_clip.duration), content=speaking_text.replace("\n"," ")))
+                        curr_time+=composite_clip.duration
                     else:
                         composite_clip = composite_clip.set_duration(5)
                     clips.append(composite_clip)
@@ -320,9 +349,17 @@ def makeBasicMovie(shot_list, tts = None):
                     speaking_text = ""
             
     final = concatenate_videoclips(clips)
-    filename = "out/" + shot_list.title + ".mp4"
-    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=5)
+    mp4_filename = "out/" + shot_list.title + ".mp4"
+    final.write_videofile(mp4_filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=5)
 
+    if (tts):
+        subtitleSRT = srt.compose(subtitles)
+        srt_filename = "out/" + shot_list.title + ".srt"
+        with open(srt_filename, "w") as text_file:
+            text_file.write(subtitleSRT)
+        subprocess.run(["ffmpeg", "-i", mp4_filename, "-i", srt_filename, "-c", "copy", "-c:s", "mov_text", TEMP_VIDEO_FILE])
+        subprocess.run(["rm", mp4_filename])
+        subprocess.run(["mv", TEMP_VIDEO_FILE, mp4_filename])
 
 if __name__ == "__main__":
     main()
