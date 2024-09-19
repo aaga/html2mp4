@@ -1,7 +1,10 @@
 from bs4 import BeautifulSoup
 
+import numpy as np
+import textwrap
 from moviepy.editor import *
 from moviepy.video.tools.drawing import color_gradient
+from skimage import transform as tf
 
 import torch
 from TTS.api import TTS
@@ -9,12 +12,20 @@ from TTS.api import TTS
 # Get device
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# MOVIE RESOLUTION
+# BASIC MOVIE RESOLUTION
 w = 1280
 h = 720
 moviesize = w,h
 
+# CINEMATIC RESOLUTION
+cw = 1920
+ch = 816
+cmoviesize = cw,ch
+
 TEMP_AUDIO_FILE = "/tmp/tmp_audio.m4a"
+TEMP_OPENING_FILE = "TEMP_OPENING.mp4"
+
+FPS = 24
 
 class ShotList:
     def __init__(self, title = None):
@@ -139,15 +150,99 @@ def main():
         tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True)
         # tts = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", progress_bar=True)
 
-        makeStarWarsMovie(shot_list, tts)
+        make_star_wars_movie(shot_list, tts)
 
-def makeStarWarsMovie(shot_list, tts):
+def make_star_wars_opening(h1scene):
+    clips = []
+    text = ""
+    long_time_ago_text = "A long time ago in an HTML page,\nfar, far away . . . ."
+    long_time_ago_clip = TextClip(txt=long_time_ago_text, color="DeepSkyBlue", method="caption", align="center", fontsize=72, font="AppleGothic-Regular", size=cmoviesize)
+    long_time_ago_clip = long_time_ago_clip.set_duration(4.3)
+    clips.append(long_time_ago_clip)
+
+    # BACKGROUND IMAGE, DARKENED AT 60%
+    stars = ImageClip('assets/stars.png')
+    stars_darkened = stars.fl_image(lambda pic: (0.6*pic).astype('int16'))
+
+    for shot in h1scene.shots:
+        if (shot.tag == "h1"):
+            logo_clip = TextClip(txt=shot.get_plain_text().lower(), color="gold", method="caption", align="center", fontsize=120, font="Star-Jedi-Hollow", size=cmoviesize)
+            logo_clip = CompositeVideoClip([stars_darkened, logo_clip],size = cmoviesize)
+            logo_clip = logo_clip.set_duration(7)
+            clips.append(logo_clip)
+        else:
+            text += ("\n".join(textwrap.wrap(shot.get_plain_text(True), width=45)) + "\n\n")
+    if (text[-2:] == "\n\n"):
+        text = text[:-2] # Chop off last newlines
+    # Add blanks
+    text = 13*"\n" + text + 20*"\n" # TODO determine buffers programatically
+
+    # CREATE THE TEXT IMAGE
+    clip_txt = TextClip(text, color='gold', align='West',fontsize=48,
+    font='Xolonium-Bold', method='label')
+
+    # SCROLL THE TEXT IMAGE BY CROPPING A MOVING AREA
+    txt_speed = 40
+    fl = lambda gf,t : gf(t)[int(txt_speed*t):int(txt_speed*t)+h,:]
+    moving_txt= clip_txt.fl(fl, apply_to=['mask'])
+
+    # ADD A VANISHING EFFECT ON THE TEXT WITH A GRADIENT MASK
+    grad = color_gradient(moving_txt.size,p1=(0,2*h/3),p2=(0,h/4),col1=0.0,col2=1.0)
+    gradmask = ImageClip(grad,ismask=True)
+    fl = lambda pic : np.minimum(pic,gradmask.img)
+    moving_txt.mask = moving_txt.mask.fl_image(fl)
+
+    # WARP THE TEXT INTO A TRAPEZOID (PERSPECTIVE EFFECT)
+    def trapzWarp(pic,cx,cy,ismask=False):
+        """ Complicated function (will be latex packaged as a fx) """
+        Y,X = pic.shape[:2]
+        src = np.array([[0,0],[X,0],[X,Y],[0,Y]])
+        dst = np.array([[cx*X,cy*Y],[(1-cx)*X,cy*Y],[X,Y],[0,Y]])
+        tform = tf.ProjectiveTransform()
+        tform.estimate(src,dst)
+        im = tf.warp(pic, tform.inverse, output_shape=(Y,X))
+        return im if ismask else (im*255).astype('uint8')
+
+    fl_im = lambda pic : trapzWarp(pic,0.2,0.3)
+    fl_mask = lambda pic : trapzWarp(pic,0.2,0.3, ismask=True)
+    warped_txt= moving_txt.fl_image(fl_im)
+    warped_txt.mask = warped_txt.mask.fl_image(fl_mask)
+
+    # COMPOSE THE MOVIE
+    scroll = CompositeVideoClip([
+    stars_darkened,
+    warped_txt.set_pos(('center','bottom'))],
+    size = cmoviesize)
+
+    scroll = scroll.set_duration(30) # TODO determine duration programatically
+    clips.append(scroll)
+
+    final = concatenate_videoclips(clips)
+    audio_clip = AudioFileClip("assets/opening.wav")
+    audio_clip = audio_clip.set_duration(final.duration)
+    final.audio = audio_clip
+
+    final.write_videofile(TEMP_OPENING_FILE, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
+
+    long_time_ago_clip.close()
+    stars.close()
+    logo_clip.close()
+    clip_txt.close()
+    moving_txt.close()
+    warped_txt.close()
+    scroll.close()
+    audio_clip.close()
+    final.close()
+
+def make_star_wars_movie(shot_list, tts):
     clips = []
     counter = 0
     luke_clip = VideoFileClip("video_clips/luke.mp4")
     c3po_clip = VideoFileClip("video_clips/c3po.mp4")
 
     for scene in shot_list.scenes:
+        if (scene.tag == "h1"):
+            make_star_wars_opening(scene)
         if (scene.tag == "dl"):
             for shot in scene.shots:
                 counter += 1
@@ -163,10 +258,12 @@ def makeStarWarsMovie(shot_list, tts):
                 looped_clip = clip_to_use.loop(duration = audio_clip.duration)
                 looped_clip.audio = audio_clip
                 clips.append(looped_clip)
-    
+
+    opening_clip = VideoFileClip(TEMP_OPENING_FILE)
+    clips.insert(0, opening_clip)
     final = concatenate_videoclips(clips)
     filename = "out/" + shot_list.title + ".mp4"
-    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=5)
+    final.write_videofile(filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
 
 
 def makeBasicMovie(shot_list, tts = None):
