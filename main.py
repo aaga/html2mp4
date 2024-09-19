@@ -209,12 +209,14 @@ def make_star_wars_opening(h1scene):
     warped_txt.set_pos(('center','bottom'))],
     size = cmoviesize)
 
-    scroll = scroll.set_duration(30) # TODO determine duration programatically
+    scroll = scroll.set_duration(31) # TODO determine duration programatically
     clips.append(scroll)
 
     final = concatenate_videoclips(clips)
+    final = final.fx(vfx.fadeout, 1)
     audio_clip = AudioFileClip("assets/opening.wav")
     audio_clip = audio_clip.set_duration(final.duration)
+    audio_clip = audio_clip.fx(afx.audio_fadeout, 1)
     final.audio = audio_clip
     final_duration = final.duration
 
@@ -267,19 +269,35 @@ def make_star_wars_movie(shot_list, dark_mode = False):
                     clip_to_use = dd_video
                 audio_clip = AudioFileClip(filepath)
                 looped_clip = clip_to_use.loop(duration = audio_clip.duration)
+                # if (counter == 1):
+                #     looped_clip = looped_clip.fx(vfx.fadein, 1)
+                #     audio_clip = audio_clip.fx(afx.audio_fadein, 1)
                 looped_clip.audio = audio_clip
                 clips.append(looped_clip)
-                subtitle_text = shot.get_plain_text(True, True)
+                subtitle_text = ("Term" if shot.tag == "dt" else "Description") + ": " + shot.get_plain_text(True, True)
                 subtitles.append(srt.Subtitle(index=counter, start=timedelta(seconds=curr_time), end=timedelta(seconds=curr_time+looped_clip.duration), content=subtitle_text.replace("\n"," ")))
                 curr_time += looped_clip.duration
+
+    # Fade out last clip
+    clips[-1] = clips[-1].fx(vfx.fadeout, 1)
+    # Credits
+    # BACKGROUND IMAGE, DARKENED AT 60%
+    stars = ImageClip('assets/stars.png')
+    stars_darkened = stars.fl_image(lambda pic: (0.6*pic).astype('int16'))
+    credit_text_clip = TextClip(txt="Parsed and Rendered by\nHTML2MP4", color="DeepSkyBlue", method="caption", align="center", fontsize=72, font="AppleGothic-Regular", size=cmoviesize)
+    credit_clip = CompositeVideoClip([stars_darkened, credit_text_clip], size=cmoviesize)
+    credit_music = AudioFileClip("assets/credits.wav")
+    credit_clip.audio = credit_music
+    credit_clip = credit_clip.set_duration(5)
+    clips.append(credit_clip)
 
     opening_clip = VideoFileClip(TEMP_OPENING_FILE)
     clips.insert(0, opening_clip)
     final = concatenate_videoclips(clips)
-    mp4_filename = "out/" + shot_list.title + ".mp4"
+    mp4_filename = "out/" + shot_list.title + (" (Dark Mode)" if dark_mode else "") + ".mp4"
     final.write_videofile(mp4_filename, codec="libx264", temp_audiofile=TEMP_AUDIO_FILE, remove_temp=True, audio_codec="aac", fps=FPS)
     subtitleSRT = srt.compose(subtitles)
-    srt_filename = "out/" + shot_list.title + ".srt"
+    srt_filename = "out/" + shot_list.title + (" (Dark Mode)" if dark_mode else "") + ".Closed Captions.srt"
     with open(srt_filename, "w") as text_file:
         text_file.write(subtitleSRT)
     subprocess.run(["ffmpeg", "-i", mp4_filename, "-i", srt_filename, "-c", "copy", "-c:s", "mov_text", TEMP_VIDEO_FILE])
