@@ -2,6 +2,8 @@
 
 This project was made for the first-ever [BrowserJam](https://github.com/BrowserJam/browserjam). As such it is a hacky, barely-functional, forever-beta piece of code. It is hyper-optimized to render specifically this page: https://info.cern.ch/hypertext/WWW/TheProject.html
 
+![](/DEMOS/Star%20Wars/The%20World%20Wide%20Web%20project.mp4)
+
 ## Overview
 This is (nominally) a "browser" that takes an HTML file and outputs a `.mp4` movie (with subtitles) that is representative of the original HTML.
 
